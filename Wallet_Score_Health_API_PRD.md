@@ -6,7 +6,7 @@ It helps users, analysts, and dApps quickly understand a wallet’s behavior and
 
 **Product Type:** Developer API + Analytics Dashboard  
 **Version:** MVP (v0.1)  
-**Owner:** <YOUR_NAME>  
+**Owner:** Lagnajit Parida
 **Date:** October 2025
 
 ---
