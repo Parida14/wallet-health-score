@@ -1,0 +1,102 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-wallet_scores}
+      POSTGRES_USER: ${POSTGRES_USER:-wallet_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wallet_pass}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-wallet_admin} -d ${POSTGRES_DB:-wallet_scores}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:RELEASE.2024-08-17T01-24-54Z
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+    command: server /data --console-address ":9001"
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - miniodata:/data
+
+  airflow:
+    image: apache/airflow:2.9.3
+    restart: unless-stopped
+    environment:
+      AIRFLOW_UID: ${AIRFLOW_UID:-50000}
+      AIRFLOW_GID: ${AIRFLOW_GID:-50000}
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
+        postgresql+psycopg2://${POSTGRES_USER:-wallet_admin}:${POSTGRES_PASSWORD:-wallet_pass}@postgres:5432/${POSTGRES_DB:-wallet_scores}
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-fernet_key_placeholder}
+      AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX: "True"
+      _PIP_ADDITIONAL_REQUIREMENTS: "psycopg2-binary"
+      PYTHONPATH: /opt/airflow/dags:/opt/airflow/src
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      MINIO_BUCKET: ${MINIO_BUCKET:-wallet-raw}
+      DATABASE_URL: >-
+        postgresql://${POSTGRES_USER:-wallet_admin}:${POSTGRES_PASSWORD:-wallet_pass}@postgres:5432/${POSTGRES_DB:-wallet_scores}
+      ALCHEMY_API_KEY: ${ALCHEMY_API_KEY:-}
+      COVALENT_API_KEY: ${COVALENT_API_KEY:-}
+      COVALENT_CHAIN_ID: ${COVALENT_CHAIN_ID:-eth-mainnet}
+    volumes:
+      - ../etl/dags:/opt/airflow/dags
+      - ../etl/src:/opt/airflow/src
+      - airflow-logs:/opt/airflow/logs
+      - airflow-config:/opt/airflow/config
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: standalone
+    ports:
+      - "${AIRFLOW_WEBSERVER_PORT:-8080}:8080"
+
+  api:
+    build:
+      context: ../api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      DATABASE_URL: >-
+        postgresql://${POSTGRES_USER:-wallet_admin}:${POSTGRES_PASSWORD:-wallet_pass}@postgres:5432/${POSTGRES_DB:-wallet_scores}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      MINIO_BUCKET: ${MINIO_BUCKET:-wallet-raw}
+      ALCHEMY_API_KEY: ${ALCHEMY_API_KEY:-}
+      COVALENT_API_KEY: ${COVALENT_API_KEY:-}
+      COVALENT_CHAIN_ID: ${COVALENT_CHAIN_ID:-eth-mainnet}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    ports:
+      - "${API_PORT:-8000}:8000"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+volumes:
+  pgdata:
+  miniodata:
+  airflow-logs:
+  airflow-config:
