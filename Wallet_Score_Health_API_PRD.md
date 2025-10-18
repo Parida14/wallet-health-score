@@ -198,4 +198,4 @@ Compare multiple wallet addresses.
 ---
 
 ## 15. Changelog
-- v0.1 (MVP): Initial PRD drafted and approved.
+- v0.1 (MVP): Initial PRD drafted
