@@ -8,7 +8,6 @@ from typing import Iterable
 import logging
 
 from wallet_etl.clients.alchemy import AlchemyClient
-from wallet_etl.clients.covalent import CovalentClient
 from wallet_etl.config import settings
 from wallet_etl.storage.minio_store import MinioStore
 from wallet_etl.storage.postgres_store import PostgresStore
@@ -51,7 +50,6 @@ def run_wallet_pipeline(addresses: Iterable[str]) -> None:
     logger.info("Running wallet ETL pipeline for %d addresses", len(address_list))
 
     alchemy = AlchemyClient(api_key=settings.alchemy_api_key)
-    covalent = CovalentClient(api_key=settings.covalent_api_key, chain_id=settings.covalent_chain_id)
     minio_store = MinioStore(
         endpoint=settings.minio_endpoint,
         access_key=settings.minio_access_key,
@@ -65,7 +63,7 @@ def run_wallet_pipeline(addresses: Iterable[str]) -> None:
     for address in address_list:
         logger.info("Processing address %s", address)
         transactions = alchemy.fetch_transactions(address)
-        positions = covalent.fetch_token_balances(address)
+        positions: list[dict] = []
 
         raw_key_prefix = datetime.now(timezone.utc).strftime("%Y%m%d")
         minio_store.put_json(f"{raw_key_prefix}/transactions/{address}.json", transactions)

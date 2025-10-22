@@ -55,8 +55,6 @@ services:
       DATABASE_URL: >-
         postgresql://${POSTGRES_USER:-wallet_admin}:${POSTGRES_PASSWORD:-wallet_pass}@postgres:5432/${POSTGRES_DB:-wallet_scores}
       ALCHEMY_API_KEY: ${ALCHEMY_API_KEY:-}
-      COVALENT_API_KEY: ${COVALENT_API_KEY:-}
-      COVALENT_CHAIN_ID: ${COVALENT_CHAIN_ID:-eth-mainnet}
     volumes:
       - ../etl/dags:/opt/airflow/dags
       - ../etl/src:/opt/airflow/src
@@ -84,8 +82,6 @@ services:
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
       MINIO_BUCKET: ${MINIO_BUCKET:-wallet-raw}
       ALCHEMY_API_KEY: ${ALCHEMY_API_KEY:-}
-      COVALENT_API_KEY: ${COVALENT_API_KEY:-}
-      COVALENT_CHAIN_ID: ${COVALENT_CHAIN_ID:-eth-mainnet}
     depends_on:
       postgres:
         condition: service_healthy

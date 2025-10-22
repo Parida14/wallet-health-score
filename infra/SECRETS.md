@@ -14,7 +14,7 @@ Clone `.env.example` to `.env` at the repo root and adjust the values:
 | `AIRFLOW_FERNET_KEY` | Encrypts Airflow connections/variables | Generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. |
 | `AIRFLOW_WEBSERVER_PORT` | Port binding for Airflow UI | Change if 8080 is occupied. |
 | `API_PORT` | FastAPI port | Needed for reverse proxies later. |
-| `ALCHEMY_API_KEY`, `COVALENT_API_KEY`, `COVALENT_CHAIN_ID` | External data providers | Chain ID defaults to `eth-mainnet`. |
+| `ALCHEMY_API_KEY` | External data providers | Required for Alchemy data pulls. |
 
 > Always store the `.env` file outside of version control. Add or verify `.env` is listed in `.gitignore`.
 
@@ -27,16 +27,14 @@ After `docker compose` brings up Airflow, log into the web UI (`http://localhost
 | `postgres_wallet_readwrite` | Postgres | Host `postgres`, schema `${POSTGRES_DB}`, login `${POSTGRES_USER}`, password `${POSTGRES_PASSWORD}`, port `5432`. |
 | `minio_default` | S3 | Extra JSON: `{"aws_access_key_id": "...", "aws_secret_access_key": "...", "host": "http://minio:9000", "region_name": "us-east-1"}`. |
 | `alchemy_http` | HTTP | Host `https://eth-mainnet.g.alchemy.com`, extra headers `{"X-Alchemy-Token": "${ALCHEMY_API_KEY}"}`. |
-| `covalent_http` | HTTP | Host `https://api.covalenthq.com`, extra params `{"key": "${COVALENT_API_KEY}"}`. |
 
-Store external API keys as Airflow **Variables** (`ALCHEMY_API_KEY`, `COVALENT_API_KEY`) or as Secrets Backend entries if you enable one later.
+Store external API keys as Airflow **Variables** (`ALCHEMY_API_KEY`) or as Secrets Backend entries if you enable one later.
 
 ## 3. External Provider Credentials
 
 | Provider | Credential | How to obtain | Scope |
 | --- | --- | --- | --- |
 | Alchemy | API Key | Create free app at <https://dashboard.alchemy.com/> | ETH Mainnet JSON-RPC & data APIs. |
-| Covalent | API Key | Sign up at <https://www.covalenthq.com/platform/> | Token balances, transactions, pricing. |
 | Dune (optional) | API Token | <https://dune.com/app/new/> | Backup analytics source. |
 | Etherscan (optional) | API Key | <https://etherscan.io/myapikey> | Fallback for transactions if needed. |
 
@@ -50,7 +48,6 @@ For CI/CD, mirror the sensitive values in repository secrets:
 - `MINIO_ROOT_PASSWORD`
 - `AIRFLOW_FERNET_KEY`
 - `ALCHEMY_API_KEY`
-- `COVALENT_API_KEY`
 
 Reference them in future workflow steps using `${{ secrets.NAME }}`. The current CI workflow only compiles/lints, but future jobs (tests, migrations) will need them.
 

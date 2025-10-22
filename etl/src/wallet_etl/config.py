@@ -15,8 +15,6 @@ class Settings:
     minio_secret_key: str = os.environ.get("MINIO_SECRET_KEY", "")
     minio_bucket: str = os.environ.get("MINIO_BUCKET", "wallet-raw")
     alchemy_api_key: str = os.environ.get("ALCHEMY_API_KEY", "")
-    covalent_api_key: str = os.environ.get("COVALENT_API_KEY", "")
-    covalent_chain_id: str = os.environ.get("COVALENT_CHAIN_ID", "eth-mainnet")
 
 
 settings = Settings()
