@@ -12,10 +12,13 @@ from airflow.operators.python import PythonOperator
 from wallet_etl.pipeline.daily_job import run_wallet_pipeline
 
 DEFAULT_ADDRESSES_VAR = "WALLET_PIPELINE_ADDRESSES"
+DEFAULT_WALLET_ADDRESSES = ["0xd8da6bf26964af9d7eed9e03e53415d37aa96045"]
 
 
 def _load_addresses(**_context) -> list[str]:
-    stored = Variable.get(DEFAULT_ADDRESSES_VAR, default_var="[]")
+    stored = Variable.get(
+        DEFAULT_ADDRESSES_VAR, default_var=json.dumps(DEFAULT_WALLET_ADDRESSES)
+    )
     return json.loads(stored)
 
 
