@@ -2,15 +2,25 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Iterable, Mapping
 
 import logging
 import psycopg2
-from psycopg2.extras import execute_batch
+from psycopg2.extras import execute_batch, Json
 
 logger = logging.getLogger(__name__)
+
+
+def _serialize_json_fields(row: Mapping[str, object], json_fields: list[str]) -> dict:
+    """Convert dict fields to psycopg2 Json for JSONB columns."""
+    result = dict(row)
+    for field in json_fields:
+        if field in result and result[field] is not None:
+            result[field] = Json(result[field])
+    return result
 
 
 @dataclass(slots=True)
@@ -70,8 +80,9 @@ class PostgresStore:
             )
             ON CONFLICT (hash) DO NOTHING;
         """
+        serialized = [_serialize_json_fields(r, ["raw_payload"]) for r in rows]
         with self._connect() as conn, conn.cursor() as cur:
-            execute_batch(cur, query, rows, page_size=200)
+            execute_batch(cur, query, serialized, page_size=200)
 
     def upsert_positions(self, rows: Iterable[Mapping[str, object]]) -> None:
         rows = list(rows)
@@ -104,8 +115,9 @@ class PostgresStore:
                 last_updated = EXCLUDED.last_updated,
                 raw_payload = EXCLUDED.raw_payload;
         """
+        serialized = [_serialize_json_fields(r, ["raw_payload"]) for r in rows]
         with self._connect() as conn, conn.cursor() as cur:
-            execute_batch(cur, query, rows, page_size=200)
+            execute_batch(cur, query, serialized, page_size=200)
 
     def upsert_features_daily(self, rows: Iterable[Mapping[str, object]]) -> None:
         rows = list(rows)
@@ -145,5 +157,6 @@ class PostgresStore:
                 total_score = EXCLUDED.total_score,
                 metrics = EXCLUDED.metrics;
         """
+        serialized = [_serialize_json_fields(r, ["metrics"]) for r in rows]
         with self._connect() as conn, conn.cursor() as cur:
-            execute_batch(cur, query, rows, page_size=100)
+            execute_batch(cur, query, serialized, page_size=100)

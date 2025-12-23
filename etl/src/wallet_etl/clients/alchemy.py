@@ -26,25 +26,30 @@ class AlchemyClient:
     def _json_rpc_request(self, method: str, params: list[Any]) -> dict[str, Any]:
         url = f"{self.base_url}/{self.api_key}"
         payload = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
-        response = self.session.post(url, json=payload, timeout=30)
+        response = self.session.post(url, json=payload, timeout=120)
         response.raise_for_status()
         return response.json()
 
-    def fetch_transactions(self, address: str) -> list[dict[str, Any]]:
-        """Fetch all transactions for a wallet using alchemy_getAssetTransfers."""
-        logger.info("Fetching transactions for address=%s via Alchemy", address)
+    def fetch_transactions(self, address: str, from_block: str = "0x0") -> list[dict[str, Any]]:
+        """Fetch all transactions for a wallet using alchemy_getAssetTransfers.
+        
+        Args:
+            address: Wallet address to fetch transactions for
+            from_block: Starting block in hex (default "0x0" for all history)
+        """
+        logger.info("Fetching transactions for address=%s from block=%s via Alchemy", address, from_block)
         all_transactions = []
         page_key = None
         while True:
             params = [
                 {
-                    "fromBlock": "0x0",
+                    "fromBlock": from_block,
                     "toBlock": "latest",
                     "fromAddress": address.lower(),
                     "category": ["external", "internal", "erc20", "erc721", "erc1155"],
                     "withMetadata": True,
                     "excludeZeroValue": False,
-                    "maxCount": 1000,
+                    "maxCount": "0x3e8",  # 1000 in hex
                 }
             ]
             if page_key:

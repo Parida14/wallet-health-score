@@ -21,7 +21,7 @@ class PostgresStore:
                 address, date, activity_score, diversification_score, risk_score,
                 profitability_score, stability_score, total_score, metrics
             FROM features_daily
-            WHERE address = %s
+            WHERE LOWER(address) = LOWER(%s)
             ORDER BY date DESC
             LIMIT 1;
         """
@@ -39,7 +39,7 @@ class PostgresStore:
                 address, date, activity_score, diversification_score, risk_score,
                 profitability_score, stability_score, total_score, metrics
             FROM features_daily
-            WHERE address = %s
+            WHERE LOWER(address) = LOWER(%s)
             ORDER BY date DESC
             LIMIT %s;
         """
@@ -86,6 +86,23 @@ class CompareResponse(BaseModel):
     comparison: dict = Field(default_factory=dict, description="Comparison statistics")
 
 
+def _transform_score_data(data: dict) -> dict:
+    """Transform flat database row into nested API response format."""
+    return {
+        "address": data["address"],
+        "wallet_score": float(data["total_score"]),
+        "components": {
+            "activity": float(data["activity_score"]),
+            "diversification": float(data["diversification_score"]),
+            "risk": float(data["risk_score"]),
+            "profitability": float(data["profitability_score"]),
+            "stability": float(data["stability_score"]),
+        },
+        "last_updated": data["date"],
+        "metrics": data["metrics"],
+    }
+
+
 # --- API ---
 app = FastAPI(title="Wallet Health Score API", version="0.1.0")
 
@@ -99,19 +116,19 @@ def read_health() -> dict[str, str]:
 @app.get("/score/{address}", response_model=WalletScoreResponse, tags=["scoring"])
 def get_wallet_score(address: str):
     """Get the latest health score for a given wallet address."""
-    score_data = pg_store.get_latest_score(address.lower())
+    score_data = pg_store.get_latest_score(address)
     if not score_data:
         raise HTTPException(status_code=404, detail="Wallet score not found.")
-    return score_data
+    return _transform_score_data(score_data)
 
 
 @app.get("/history/{address}", response_model=List[WalletScoreResponse], tags=["scoring"])
 def get_wallet_history(address: str, days: int = 30):
     """Get the historical health scores for a given wallet address."""
-    history_data = pg_store.get_score_history(address.lower(), limit=days)
+    history_data = pg_store.get_score_history(address, limit=days)
     if not history_data:
         raise HTTPException(status_code=404, detail="Wallet history not found.")
-    return history_data
+    return [_transform_score_data(d) for d in history_data]
 
 
 @app.post("/compare", response_model=CompareResponse, tags=["scoring"])
@@ -121,9 +138,9 @@ def compare_wallets(request: CompareRequest):
     missing_addresses = []
 
     for addr in request.addresses:
-        score_data = pg_store.get_latest_score(addr.lower())
+        score_data = pg_store.get_latest_score(addr)
         if score_data:
-            wallets_data.append(score_data)
+            wallets_data.append(_transform_score_data(score_data))
         else:
             missing_addresses.append(addr)
 
@@ -134,7 +151,7 @@ def compare_wallets(request: CompareRequest):
         )
 
     # Calculate comparison statistics
-    scores = [w["total_score"] for w in wallets_data]
+    scores = [w["wallet_score"] for w in wallets_data]
     comparison = {
         "total_wallets_found": len(wallets_data),
         "missing_wallets": missing_addresses,
@@ -142,7 +159,7 @@ def compare_wallets(request: CompareRequest):
         "highest_score": max(scores) if scores else 0,
         "lowest_score": min(scores) if scores else 0,
         "ranking": sorted(
-            [{"address": w["address"], "score": w["total_score"]} for w in wallets_data],
+            [{"address": w["address"], "score": w["wallet_score"]} for w in wallets_data],
             key=lambda x: x["score"],
             reverse=True
         )

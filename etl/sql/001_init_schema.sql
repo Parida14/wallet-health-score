@@ -35,9 +35,11 @@ CREATE TABLE IF NOT EXISTS positions (
     usd_value NUMERIC(38, 18),
     last_updated TIMESTAMPTZ NOT NULL,
     raw_payload JSONB,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (address, token, COALESCE(protocol, ''))
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_positions_unique
+    ON positions (address, token, COALESCE(protocol, ''));
 
 CREATE TABLE IF NOT EXISTS features_daily (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

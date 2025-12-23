@@ -41,7 +41,17 @@ def calculate_scores(address: str, *, transactions: list[dict], positions: list[
     activity_score = min(len(recent_tx) / 10.0, 1.0)  # Normalize: 10+ tx in 30d = max score
 
     # Diversification Score (based on number of tokens)
-    num_tokens = len([p for p in positions if int(p.get("tokenBalance", 0)) > 0])
+    def _parse_balance(val) -> int:
+        if val is None:
+            return 0
+        if isinstance(val, int):
+            return val
+        val_str = str(val)
+        if val_str.startswith("0x"):
+            return int(val_str, 16)
+        return int(val_str)
+    
+    num_tokens = len([p for p in positions if _parse_balance(p.get("tokenBalance", 0)) > 0])
     diversification_score = min(num_tokens / 10.0, 1.0)  # Normalize: 10+ tokens = max score
 
     # Placeholder scores
