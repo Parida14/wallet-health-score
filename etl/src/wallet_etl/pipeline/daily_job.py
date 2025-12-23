@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Iterable
 
 import logging
@@ -28,21 +28,54 @@ def _coerce_timestamp(value) -> datetime:
 
 
 def calculate_scores(address: str, *, transactions: list[dict], positions: list[dict]) -> dict:
-    """Placeholder scoring logic until metrics are implemented."""
-    logger.info("Calculating placeholder scores for %s", address)
-    totals = {
-        "activity_score": 0.0,
-        "diversification_score": 0.0,
-        "risk_score": 0.0,
-        "profitability_score": 0.0,
-        "stability_score": 0.0,
+    """Calculate wallet health scores based on transactions and positions."""
+    logger.info("Calculating scores for %s", address)
+
+    # Activity Score (based on recent transactions)
+    now = datetime.now(timezone.utc)
+    recent_tx = [
+        tx
+        for tx in transactions
+        if _coerce_timestamp(tx["metadata"]["blockTimestamp"]) > now - timedelta(days=30)
+    ]
+    activity_score = min(len(recent_tx) / 10.0, 1.0)  # Normalize: 10+ tx in 30d = max score
+
+    # Diversification Score (based on number of tokens)
+    num_tokens = len([p for p in positions if int(p.get("tokenBalance", 0)) > 0])
+    diversification_score = min(num_tokens / 10.0, 1.0)  # Normalize: 10+ tokens = max score
+
+    # Placeholder scores
+    risk_score = 0.5
+    profitability_score = 0.5
+    stability_score = 0.5
+
+    scores = {
+        "activity_score": activity_score,
+        "diversification_score": diversification_score,
+        "risk_score": risk_score,
+        "profitability_score": profitability_score,
+        "stability_score": stability_score,
     }
-    totals["total_score"] = sum(totals.values()) / 5 if totals else 0.0
-    totals["metrics"] = {
-        "transactions_count": len(transactions),
-        "positions_count": len(positions),
+
+    # Weighted average
+    weights = {
+        "activity_score": 0.2,
+        "diversification_score": 0.2,
+        "risk_score": 0.2,
+        "profitability_score": 0.2,
+        "stability_score": 0.2,
     }
-    return totals
+    total_score = sum(scores[k] * weights[k] for k in scores)
+
+    return {
+        **scores,
+        "total_score": total_score,
+        "metrics": {
+            "transactions_count": len(transactions),
+            "recent_transactions_count": len(recent_tx),
+            "positions_count": num_tokens,
+        },
+    }
 
 
 def run_wallet_pipeline(addresses: Iterable[str]) -> None:
@@ -63,20 +96,26 @@ def run_wallet_pipeline(addresses: Iterable[str]) -> None:
     for address in address_list:
         logger.info("Processing address %s", address)
         transactions = alchemy.fetch_transactions(address)
-        positions: list[dict] = []
+        positions = alchemy.fetch_token_balances(address)
 
         raw_key_prefix = datetime.now(timezone.utc).strftime("%Y%m%d")
         minio_store.put_json(f"{raw_key_prefix}/transactions/{address}.json", transactions)
         minio_store.put_json(f"{raw_key_prefix}/positions/{address}.json", positions)
 
         now = datetime.now(timezone.utc)
+        if transactions:
+            first_tx_ts = _coerce_timestamp(transactions[-1]["metadata"]["blockTimestamp"])
+            last_tx_ts = _coerce_timestamp(transactions[0]["metadata"]["blockTimestamp"])
+        else:
+            first_tx_ts = last_tx_ts = now
+
         pg_store.upsert_wallets(
             [
                 {
                     "address": address,
                     "chain": "eth_mainnet",
-                    "first_seen": now,
-                    "last_seen": now,
+                    "first_seen": first_tx_ts,
+                    "last_seen": last_tx_ts,
                     "tags": [],
                 }
             ]
@@ -85,7 +124,7 @@ def run_wallet_pipeline(addresses: Iterable[str]) -> None:
         tx_rows = []
         for tx in transactions:
             tx_hash = tx.get("hash")
-            ts_value = tx.get("timestamp")
+            ts_value = tx.get("metadata", {}).get("blockTimestamp")
             if not tx_hash or ts_value is None:
                 continue
             ts = _coerce_timestamp(ts_value)
@@ -93,11 +132,11 @@ def run_wallet_pipeline(addresses: Iterable[str]) -> None:
                 {
                     "hash": tx_hash,
                     "address": address,
-                    "block_number": tx.get("blockNumber"),
+                    "block_number": int(tx.get("blockNum"), 16) if tx.get("blockNum") else None,
                     "timestamp": ts,
-                    "gas_spent_usd": tx.get("gasUsedUSD"),
+                    "gas_spent_usd": tx.get("metadata", {}).get("gasUsedUSD"),
                     "tx_type": tx.get("category"),
-                    "contracts_involved": tx.get("rawContract", {}).get("addresses", []),
+                    "contracts_involved": [tx.get("rawContract", {}).get("address")],
                     "raw_payload": tx,
                 }
             )
@@ -105,16 +144,17 @@ def run_wallet_pipeline(addresses: Iterable[str]) -> None:
 
         position_rows = []
         for pos in positions:
-            token = pos.get("contract_address")
+            token = pos.get("contractAddress")
             if not token:
                 continue
+            balance_int = int(pos.get("tokenBalance"), 16) if pos.get("tokenBalance") else 0
             position_rows.append(
                 {
                     "address": address,
                     "token": token,
-                    "protocol": pos.get("protocol_name"),
-                    "balance": pos.get("balance"),
-                    "usd_value": pos.get("quote"),
+                    "protocol": None,  # Not available from this endpoint
+                    "balance": balance_int,
+                    "usd_value": None,  # Requires separate pricing call
                     "last_updated": now,
                     "raw_payload": pos,
                 }
