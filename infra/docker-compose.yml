@@ -56,6 +56,7 @@ services:
     volumes:
       - ../etl/dags:/opt/airflow/dags
       - ../etl/src:/opt/airflow/src
+      - ../etl/scripts:/opt/airflow/scripts # Add this line to mount the scripts directory
       - airflow-logs:/opt/airflow/logs
       - airflow-config:/opt/airflow/config
     depends_on:
@@ -88,6 +89,22 @@ services:
     ports:
       - "${API_PORT:-8000}:8000"
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+  web:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:8000
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      # Note: NEXT_PUBLIC_* vars must be set at BUILD time for client-side code
+      # The browser calls localhost:8000 directly, not the internal docker network
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-3000}:3000"
 
 volumes:
   pgdata:

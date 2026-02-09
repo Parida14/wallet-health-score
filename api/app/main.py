@@ -1,9 +1,9 @@
 import os
-from datetime import date
 from typing import List
 
 import psycopg2
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 
@@ -58,23 +58,25 @@ pg_store = PostgresStore(DATABASE_URL)
 
 # --- API Models ---
 class ScoreComponents(BaseModel):
-    activity: float = Field(..., alias="activity_score")
-    diversification: float = Field(..., alias="diversification_score")
-    risk: float = Field(..., alias="risk_score")
-    profitability: float = Field(..., alias="profitability_score")
-    stability: float = Field(..., alias="stability_score")
+    activity: float
+    diversification: float
+    risk: float
+    profitability: float
+    stability: float
 
-    model_config = {"populate_by_name": True}
+
+class WalletMetrics(BaseModel):
+    transactions_count: int = 0
+    recent_transactions_count: int = 0
+    positions_count: int = 0
 
 
 class WalletScoreResponse(BaseModel):
     address: str
-    wallet_score: float = Field(..., alias="total_score")
+    wallet_score: float
     components: ScoreComponents
-    last_updated: date = Field(..., alias="date")
-    metrics: dict
-
-    model_config = {"populate_by_name": True}
+    last_updated: str
+    metrics: WalletMetrics
 
 
 class CompareRequest(BaseModel):
@@ -88,6 +90,7 @@ class CompareResponse(BaseModel):
 
 def _transform_score_data(data: dict) -> dict:
     """Transform flat database row into nested API response format."""
+    metrics = data.get("metrics") or {}
     return {
         "address": data["address"],
         "wallet_score": float(data["total_score"]),
@@ -98,13 +101,31 @@ def _transform_score_data(data: dict) -> dict:
             "profitability": float(data["profitability_score"]),
             "stability": float(data["stability_score"]),
         },
-        "last_updated": data["date"],
-        "metrics": data["metrics"],
+        "last_updated": str(data["date"]),
+        "metrics": {
+            "transactions_count": metrics.get("transactions_count", 0),
+            "recent_transactions_count": metrics.get("recent_tx_count", 0),
+            "positions_count": metrics.get("positions_count", 0),
+        },
     }
 
 
 # --- API ---
 app = FastAPI(title="Wallet Health Score API", version="0.1.0")
+
+# Configure CORS to allow frontend requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health", tags=["system"])
