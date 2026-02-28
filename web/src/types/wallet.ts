@@ -65,6 +65,23 @@ export interface CompareRequest {
 }
 
 /**
+ * Extraction job status type
+ */
+export type ExtractionStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+/**
+ * Extraction job response from the API
+ */
+export interface ExtractionJob {
+  id: string;
+  address: string;
+  status: ExtractionStatus;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
  * Score category based on the total score value
  */
 export type ScoreCategory = 'excellent' | 'good' | 'fair' | 'poor' | 'critical';

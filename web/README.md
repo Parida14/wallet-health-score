@@ -63,6 +63,23 @@ npm run build
 npm start
 ```
 
+## Deployment
+
+### Vercel (Recommended)
+
+The easiest way to deploy this app is to use [Vercel](https://vercel.com):
+
+1. Push your code to GitHub/GitLab/Bitbucket
+2. Import the project on [Vercel](https://vercel.com/new)
+3. Add environment variable: `NEXT_PUBLIC_API_URL`
+4. Deploy!
+
+**📚 See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed instructions**
+
+**📋 See [../DEPLOYMENT_CHECKLIST.md](../DEPLOYMENT_CHECKLIST.md) for a complete checklist**
+
+**🚀 See [../VERCEL_DEPLOYMENT.md](../VERCEL_DEPLOYMENT.md) for full-stack deployment guide**
+
 ### Docker
 
 The app can be run in Docker as part of the full stack:

@@ -35,6 +35,12 @@ const COMPONENT_ORDER: ComponentKey[] = [
   'stability',
 ];
 
+/** Bright radar colors for dark mode visibility */
+const RADAR_STROKE = '#22d3ee'; // Cyan-400
+const RADAR_FILL = '#06b6d4';  // Cyan-500
+const GRID_COLOR = 'rgba(255,255,255,0.18)';
+const LABEL_COLOR = 'rgba(255,255,255,0.85)';
+
 /**
  * Radar chart component for visualizing the 5 score components.
  * Shows a pentagon shape with each vertex representing a component.
@@ -43,7 +49,7 @@ export function ComponentRadar({
   components,
   className,
   showLabels = true,
-  fillOpacity = 0.3,
+  fillOpacity = 0.45,
 }: ComponentRadarProps) {
   const data: RadarDataPoint[] = COMPONENT_ORDER.map((key) => ({
     component: COMPONENT_META[key].label,
@@ -57,16 +63,16 @@ export function ComponentRadar({
       <ResponsiveContainer width="100%" height="100%">
         <RadarChart cx="50%" cy="50%" outerRadius="70%" data={data}>
           <PolarGrid
-            stroke="hsl(var(--border))"
-            strokeOpacity={0.5}
+            stroke={GRID_COLOR}
+            strokeOpacity={0.7}
           />
           {showLabels && (
             <PolarAngleAxis
               dataKey="component"
               tick={{
-                fill: 'hsl(var(--muted-foreground))',
+                fill: LABEL_COLOR,
                 fontSize: 12,
-                fontWeight: 500,
+                fontWeight: 600,
               }}
               tickLine={false}
             />
@@ -80,19 +86,20 @@ export function ComponentRadar({
           <Radar
             name="Score"
             dataKey="value"
-            stroke="hsl(var(--primary))"
-            fill="hsl(var(--primary))"
+            stroke={RADAR_STROKE}
+            fill={RADAR_FILL}
             fillOpacity={fillOpacity}
-            strokeWidth={2}
+            strokeWidth={2.5}
             dot={{
-              r: 4,
-              fill: 'hsl(var(--primary))',
-              strokeWidth: 0,
+              r: 5,
+              fill: RADAR_STROKE,
+              stroke: '#fff',
+              strokeWidth: 1,
             }}
             activeDot={{
-              r: 6,
-              fill: 'hsl(var(--primary))',
-              stroke: 'hsl(var(--background))',
+              r: 7,
+              fill: RADAR_STROKE,
+              stroke: '#fff',
               strokeWidth: 2,
             }}
           />
@@ -103,8 +110,8 @@ export function ComponentRadar({
               const meta = COMPONENT_META[point.key];
               return (
                 <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg">
-                  <p className="font-semibold text-sm">{meta.label}</p>
-                  <p className="text-2xl font-bold text-primary">
+                  <p className="font-semibold text-sm text-foreground">{meta.label}</p>
+                  <p className="text-2xl font-bold" style={{ color: RADAR_STROKE }}>
                     {point.value}%
                   </p>
                   <p className="text-xs text-muted-foreground mt-1 max-w-[180px]">

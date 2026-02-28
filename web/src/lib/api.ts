@@ -3,7 +3,7 @@
  * Provides typed functions for all API endpoints.
  */
 
-import type { WalletScore, CompareRequest, CompareResponse } from '@/types/wallet';
+import type { WalletScore, CompareRequest, CompareResponse, ExtractionJob } from '@/types/wallet';
 
 /**
  * Base URL for the API - configurable via environment variable
@@ -144,6 +144,41 @@ export async function compareWallets(
 }
 
 /**
+ * Trigger on-demand extraction of wallet data.
+ * The API returns 202 Accepted with a job object.
+ *
+ * @param address - Ethereum wallet address (0x...)
+ * @returns Extraction job with status info
+ *
+ * @example
+ * const job = await extractWallet('0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045');
+ * console.log(job.id, job.status); // "uuid" "pending"
+ */
+export async function extractWallet(address: string): Promise<ExtractionJob> {
+  return fetchApi<ExtractionJob>(`/extract/${address}`, { method: 'POST' });
+}
+
+/**
+ * Poll the status of an extraction job.
+ *
+ * @param jobId - UUID of the extraction job
+ * @returns Current job status
+ */
+export async function getExtractionStatus(jobId: string): Promise<ExtractionJob> {
+  return fetchApi<ExtractionJob>(`/extract/status/${jobId}`);
+}
+
+/**
+ * Get the latest extraction job for a wallet address.
+ *
+ * @param address - Ethereum wallet address (0x...)
+ * @returns Latest extraction job or throws 404
+ */
+export async function getExtractionStatusByAddress(address: string): Promise<ExtractionJob> {
+  return fetchApi<ExtractionJob>(`/extract/status/address/${address}`);
+}
+
+/**
  * Check if the API is healthy and responding.
  * 
  * @returns true if API is healthy, false otherwise
@@ -164,6 +199,9 @@ export const walletApi = {
   getScore: getWalletScore,
   getHistory: getWalletHistory,
   compare: compareWallets,
+  extractWallet,
+  getExtractionStatus,
+  getExtractionStatusByAddress,
   checkHealth: checkApiHealth,
   baseUrl: API_BASE_URL,
 };

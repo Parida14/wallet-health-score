@@ -33,6 +33,10 @@ interface ChartDataPoint {
   stability: number;
 }
 
+/** Bright chart color for dark mode visibility */
+const CHART_STROKE = '#34d399'; // Emerald-400
+const CHART_GLOW = 'rgba(52, 211, 153, 0.5)';
+
 /**
  * Line/Area chart showing historical wallet scores over time.
  */
@@ -79,14 +83,14 @@ export function HistoryChart({
           {showGrid && (
             <CartesianGrid
               strokeDasharray="3 3"
-              stroke="hsl(var(--border))"
-              strokeOpacity={0.5}
+              stroke="rgba(255,255,255,0.15)"
+              strokeOpacity={0.7}
               vertical={false}
             />
           )}
           <XAxis
             dataKey="displayDate"
-            stroke="hsl(var(--muted-foreground))"
+            stroke="rgba(255,255,255,0.6)"
             fontSize={12}
             tickLine={false}
             axisLine={false}
@@ -94,7 +98,7 @@ export function HistoryChart({
           />
           <YAxis
             domain={[0, 100]}
-            stroke="hsl(var(--muted-foreground))"
+            stroke="rgba(255,255,255,0.6)"
             fontSize={12}
             tickLine={false}
             axisLine={false}
@@ -108,7 +112,7 @@ export function HistoryChart({
               return (
                 <div className="bg-popover border border-border rounded-lg px-4 py-3 shadow-lg">
                   <p className="text-xs text-muted-foreground mb-2">{label}</p>
-                  <p className="text-2xl font-bold text-primary mb-2">
+                  <p className="text-2xl font-bold mb-2" style={{ color: CHART_STROKE }}>
                     {point.score}
                   </p>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
@@ -131,21 +135,21 @@ export function HistoryChart({
             <>
               <defs>
                 <linearGradient id="scoreGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                  <stop offset="5%" stopColor={CHART_STROKE} stopOpacity={0.5} />
+                  <stop offset="95%" stopColor={CHART_STROKE} stopOpacity={0.05} />
                 </linearGradient>
               </defs>
               <Area
                 type="monotone"
                 dataKey="score"
-                stroke="hsl(var(--primary))"
-                strokeWidth={2}
+                stroke={CHART_STROKE}
+                strokeWidth={3}
                 fill="url(#scoreGradient)"
                 dot={false}
                 activeDot={{
                   r: 6,
-                  fill: 'hsl(var(--primary))',
-                  stroke: 'hsl(var(--background))',
+                  fill: CHART_STROKE,
+                  stroke: '#fff',
                   strokeWidth: 2,
                 }}
               />
@@ -154,13 +158,13 @@ export function HistoryChart({
             <Line
               type="monotone"
               dataKey="score"
-              stroke="hsl(var(--primary))"
-              strokeWidth={2}
+              stroke={CHART_STROKE}
+              strokeWidth={3}
               dot={false}
               activeDot={{
                 r: 6,
-                fill: 'hsl(var(--primary))',
-                stroke: 'hsl(var(--background))',
+                fill: CHART_STROKE,
+                stroke: '#fff',
                 strokeWidth: 2,
               }}
             />
