@@ -27,7 +27,9 @@ jobs:
         run: python -m compileall api/app
 
       - name: Create .env for Docker Compose validation
-        run: cp .env.example .env
+        run: |
+          # .env is gitignored; compose requires the file to exist for env_file: so create a minimal one
+          touch .env
 
       - name: Validate Docker Compose file
         run: docker compose -f infra/docker-compose.yml config
