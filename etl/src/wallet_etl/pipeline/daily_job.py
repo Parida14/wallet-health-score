@@ -408,7 +408,12 @@ def run_wallet_pipeline(addresses: Iterable[str]) -> None:
     address_list = list(addresses)
     logger.info("Running wallet ETL pipeline for %d addresses", len(address_list))
 
-    alchemy = AlchemyClient(api_key=settings.alchemy_api_key)
+    if not (settings.alchemy_api_key or "").strip():
+        raise ValueError(
+            "ALCHEMY_API_KEY is not set. Add it to the repo root .env file and restart the API container. "
+            "Get a free key at https://dashboard.alchemy.com"
+        )
+    alchemy = AlchemyClient(api_key=settings.alchemy_api_key.strip())
     minio_store = MinioStore(
         endpoint=settings.minio_endpoint,
         access_key=settings.minio_access_key,
