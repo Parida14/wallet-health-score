@@ -26,5 +26,8 @@ jobs:
       - name: Verify API sources compile
         run: python -m compileall api/app
 
+      - name: Create .env for Docker Compose validation
+        run: cp .env.example .env
+
       - name: Validate Docker Compose file
         run: docker compose -f infra/docker-compose.yml config
