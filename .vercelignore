@@ -1,0 +1,9 @@
+# Ignore everything except web
+/api
+/etl
+/infra
+/node_modules
+*.md
+!README.md
+.env*
+!.env.example

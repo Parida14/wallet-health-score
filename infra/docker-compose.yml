@@ -36,6 +36,8 @@ services:
   airflow:
     image: apache/airflow:2.9.3
     restart: unless-stopped
+    env_file:
+      - ../.env
     environment:
       AIRFLOW_UID: ${AIRFLOW_UID:-50000}
       AIRFLOW_GID: ${AIRFLOW_GID:-50000}
@@ -52,10 +54,10 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-wallet-raw}
       DATABASE_URL: >-
         postgresql://${POSTGRES_USER:-wallet_admin}:${POSTGRES_PASSWORD:-wallet_pass}@postgres:5432/${POSTGRES_DB:-wallet_scores}
-      ALCHEMY_API_KEY: ${ALCHEMY_API_KEY:-}
     volumes:
       - ../etl/dags:/opt/airflow/dags
       - ../etl/src:/opt/airflow/src
+      - ../etl/scripts:/opt/airflow/scripts # Add this line to mount the scripts directory
       - airflow-logs:/opt/airflow/logs
       - airflow-config:/opt/airflow/config
     depends_on:
@@ -70,6 +72,8 @@ services:
       context: ../api
       dockerfile: Dockerfile
     restart: unless-stopped
+    env_file:
+      - ../.env
     environment:
       API_HOST: 0.0.0.0
       API_PORT: 8000
@@ -79,7 +83,9 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
       MINIO_BUCKET: ${MINIO_BUCKET:-wallet-raw}
-      ALCHEMY_API_KEY: ${ALCHEMY_API_KEY:-}
+      PYTHONPATH: /app:/app/etl_src
+    volumes:
+      - ../etl/src:/app/etl_src
     depends_on:
       postgres:
         condition: service_healthy
@@ -88,6 +94,22 @@ services:
     ports:
       - "${API_PORT:-8000}:8000"
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+  web:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:8000
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      # Note: NEXT_PUBLIC_* vars must be set at BUILD time for client-side code
+      # The browser calls localhost:8000 directly, not the internal docker network
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-3000}:3000"
 
 volumes:
   pgdata:
