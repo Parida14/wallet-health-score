@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScoreCard } from '@/components/score-card';
-import { HistoryChart } from '@/components/history-chart';
+import { ActivityTrendChart } from '@/components/activity-trend-chart';
 import { WalletSearch } from '@/components/wallet-search';
 import {
   ScoreCardSkeleton,
@@ -16,7 +16,7 @@ import {
   ErrorState,
 } from '@/components/loading-states';
 import { walletApi, ApiError } from '@/lib/api';
-import type { WalletScore } from '@/types/wallet';
+import type { WalletScore, WeeklyActivityPoint } from '@/types/wallet';
 import type { ExtractionJob, ExtractionStatus } from '@/types/wallet';
 import { formatAddress } from '@/types/wallet';
 
@@ -38,7 +38,7 @@ export default function WalletDetailPage() {
   const address = params.address as string;
 
   const [score, setScore] = useState<WalletScore | null>(null);
-  const [history, setHistory] = useState<WalletScore[]>([]);
+  const [activitySeries, setActivitySeries] = useState<WeeklyActivityPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -65,13 +65,13 @@ export default function WalletDetailPage() {
     setIsNotFound(false);
 
     try {
-      const [scoreData, historyData] = await Promise.all([
+      const [scoreData, activityData] = await Promise.all([
         walletApi.getScore(address),
-        walletApi.getHistory(address, 30).catch(() => []),
+        walletApi.getActivity(address, 52).catch(() => null),
       ]);
 
       setScore(scoreData);
-      setHistory(historyData);
+      setActivitySeries(activityData?.series ?? []);
       // Clear extraction state on successful load
       setExtractionJob(null);
       setIsExtracting(false);
@@ -228,28 +228,32 @@ export default function WalletDetailPage() {
             {/* Score Card */}
             <ScoreCard data={score} />
 
-            {/* History Chart */}
+            {/* Activity Trend */}
             <Card>
               <CardHeader>
-                <CardTitle>Score History</CardTitle>
+                <CardTitle>Activity Trend</CardTitle>
+                <CardDescription>
+                  Weekly transaction volume from on-chain history (last 52 weeks).
+                  Intensity scores 10+ txs/week as fully active.
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                {history.length > 0 ? (
-                  <Tabs defaultValue="30d">
+                {activitySeries.length > 0 ? (
+                  <Tabs defaultValue="52w">
                     <TabsList className="mb-4">
-                      <TabsTrigger value="7d">7 Days</TabsTrigger>
-                      <TabsTrigger value="30d">30 Days</TabsTrigger>
+                      <TabsTrigger value="12w">12 Weeks</TabsTrigger>
+                      <TabsTrigger value="52w">1 Year</TabsTrigger>
                     </TabsList>
-                    <TabsContent value="7d">
-                      <HistoryChart history={history.slice(0, 7)} />
+                    <TabsContent value="12w">
+                      <ActivityTrendChart series={activitySeries.slice(-12)} />
                     </TabsContent>
-                    <TabsContent value="30d">
-                      <HistoryChart history={history} />
+                    <TabsContent value="52w">
+                      <ActivityTrendChart series={activitySeries} />
                     </TabsContent>
                   </Tabs>
                 ) : (
-                  <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-                    <p>No historical data available yet</p>
+                  <div className="flex items-center justify-center h-[300px] text-muted-foreground text-sm text-center px-4">
+                    <p>No transactions stored yet — run Fetch Wallet Data to build this trend.</p>
                   </div>
                 )}
               </CardContent>
