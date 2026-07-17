@@ -67,6 +67,30 @@ def _parse_value(val) -> float:
     return 0.0
 
 
+def _transaction_timestamp_bounds(
+    transactions: list[dict],
+) -> tuple[datetime | None, datetime | None]:
+    """Return ``(earliest, latest)`` ``blockTimestamp`` across transfers.
+
+    Alchemy ``alchemy_getAssetTransfers`` defaults to ascending order, but
+    callers must not rely on list position — use min/max so a future order
+    change (or mixed pages) cannot invert wallet age / first_seen / last_seen.
+    Transfers missing ``metadata.blockTimestamp`` are skipped.
+    """
+    timestamps: list[datetime] = []
+    for tx in transactions:
+        ts_value = (tx.get("metadata") or {}).get("blockTimestamp")
+        if ts_value is None:
+            continue
+        try:
+            timestamps.append(_coerce_timestamp(ts_value))
+        except (ValueError, TypeError, OSError):
+            continue
+    if not timestamps:
+        return None, None
+    return min(timestamps), max(timestamps)
+
+
 def calculate_activity_score(transactions: list[dict], now: datetime) -> tuple[float, dict]:
     """
     Calculate activity score based on recent transaction frequency.
@@ -103,17 +127,88 @@ def calculate_activity_score(transactions: list[dict], now: datetime) -> tuple[f
     }
 
 
+def calculate_stablecoin_ratio(positions: list[dict]) -> float:
+    """
+    Compute the share of portfolio value held in known stablecoins
+    (USDT/USDC/DAI/BUSD/TUSD/USDP/FEI/FRAX/LUSD/sUSD; see ``STABLECOINS``).
+
+    Weighting strategy (deterministic, with graceful degradation):
+
+    1. **USD-value-weighted** when every active position carries a numeric
+       ``usd_value > 0``. This is the preferred path once pricing is wired
+       into the pipeline.
+    2. **Balance-share-weighted** fallback when any active position is
+       missing a positive ``usd_value``. Uses raw ``tokenBalance`` shares.
+       This is well-defined and never raises, but it is *not* a true
+       USD-weighted ratio — different tokens have different unit values.
+       The fallback is documented here so callers do not silently mistake
+       it for a value-weighted figure.
+
+    Positions with zero or missing balance are excluded. Empty input
+    returns ``0.0``. Contract addresses are matched case-insensitively
+    against the canonical ``STABLECOINS`` set.
+
+    Args:
+        positions: A list of position dicts, each shaped like the Alchemy
+            token-balance payload: ``{"contractAddress": "0x...",
+            "tokenBalance": <int|hex-str>, "usd_value": <float|None>}``.
+
+    Returns:
+        A float in ``[0.0, 1.0]`` representing the stablecoin exposure.
+    """
+    active_positions = [
+        p for p in positions
+        if _parse_balance(p.get("tokenBalance", 0)) > 0
+    ]
+
+    if not active_positions:
+        return 0.0
+
+    usd_values: list[float] = []
+    use_usd_weighting = True
+    for pos in active_positions:
+        raw = pos.get("usd_value")
+        if isinstance(raw, (int, float)) and raw > 0:
+            usd_values.append(float(raw))
+        else:
+            use_usd_weighting = False
+            break
+
+    if use_usd_weighting:
+        total_usd = sum(usd_values)
+        stable_usd = sum(
+            usd
+            for pos, usd in zip(active_positions, usd_values)
+            if pos.get("contractAddress", "").lower() in STABLECOINS
+        )
+        return stable_usd / total_usd if total_usd > 0 else 0.0
+
+    balances = [_parse_balance(p.get("tokenBalance", 0)) for p in active_positions]
+    total_balance = sum(balances)
+    if total_balance <= 0:
+        return 0.0
+    stable_balance = sum(
+        bal
+        for pos, bal in zip(active_positions, balances)
+        if pos.get("contractAddress", "").lower() in STABLECOINS
+    )
+    return stable_balance / total_balance
+
+
 def calculate_diversification_score(positions: list[dict]) -> tuple[float, dict]:
     """
     Calculate diversification score based on portfolio spread.
     
-    Metrics:
-    - Number of unique tokens held
-    - Balance distribution (Herfindahl index inverse)
+    Sub-components:
+    - ``token_count_score`` (weight 0.6): number of unique tokens held
+    - ``concentration_score`` (weight 0.3): rewards holding multiple tokens
+    - ``stablecoin_balance_score`` (weight 0.1): rewards moderate stablecoin
+      exposure as cross-asset-class diversification. Modeled as an inverted
+      "tent" peaking at a 30% stablecoin share — both 0% (no defensive
+      allocation) and 100% (concentrated in one asset class) score lower.
     
     Returns: (score 0-1, metrics dict)
     """
-    # Filter positions with non-zero balance
     active_positions = [
         p for p in positions 
         if _parse_balance(p.get("tokenBalance", 0)) > 0
@@ -121,17 +216,29 @@ def calculate_diversification_score(positions: list[dict]) -> tuple[float, dict]
     
     num_tokens = len(active_positions)
     
-    # Token count score
     token_count_score = min(num_tokens / 10.0, 1.0)  # 10+ tokens = max
     
-    # Calculate concentration (simplified - would need USD values for accurate HHI)
-    # For now, just reward having multiple tokens
+    # Concentration proxy: reward holding multiple tokens. Real Herfindahl
+    # would need USD values for every position, which the pipeline does not
+    # yet supply (see ``run_wallet_pipeline``: usd_value=None).
     concentration_score = min(num_tokens / 20.0, 1.0) if num_tokens > 1 else 0.0
-    
-    diversification_score = (token_count_score * 0.7) + (concentration_score * 0.3)
-    
+
+    stablecoin_ratio = calculate_stablecoin_ratio(positions)
+    # Inverted-tent peaking at a 30% stablecoin allocation. Anchored so that
+    # all-or-nothing portfolios score 0 on this sub-component and a balanced
+    # mix scores 1.0.
+    stablecoin_balance_score = max(0.0, 1.0 - abs(stablecoin_ratio - 0.3) / 0.7)
+
+    diversification_score = (
+        token_count_score * 0.6
+        + concentration_score * 0.3
+        + stablecoin_balance_score * 0.1
+    )
+    diversification_score = max(0.0, min(1.0, diversification_score))
+
     return diversification_score, {
         "unique_tokens": num_tokens,
+        "stablecoin_exposure_ratio": round(stablecoin_ratio, 4),
     }
 
 
@@ -298,14 +405,11 @@ def calculate_stability_score(transactions: list[dict], positions: list[dict], n
     )
     stablecoin_ratio = stablecoin_count / len(active_positions) if active_positions else 0
     
-    # Wallet age (based on first transaction)
+    # Wallet age from earliest transfer (order-independent)
     wallet_age_days = 0
-    if transactions:
-        try:
-            first_tx_time = _coerce_timestamp(transactions[-1]["metadata"]["blockTimestamp"])
-            wallet_age_days = (now - first_tx_time).days
-        except (KeyError, IndexError):
-            wallet_age_days = 0
+    first_tx_time, _ = _transaction_timestamp_bounds(transactions)
+    if first_tx_time is not None:
+        wallet_age_days = (now - first_tx_time).days
     
     # Age score: wallets > 2 years are considered mature
     age_score = min(wallet_age_days / 730.0, 1.0)  # 730 days = 2 years
@@ -434,10 +538,8 @@ def run_wallet_pipeline(addresses: Iterable[str]) -> None:
         minio_store.put_json(f"{raw_key_prefix}/positions/{address}.json", positions)
 
         now = datetime.now(timezone.utc)
-        if transactions:
-            first_tx_ts = _coerce_timestamp(transactions[-1]["metadata"]["blockTimestamp"])
-            last_tx_ts = _coerce_timestamp(transactions[0]["metadata"]["blockTimestamp"])
-        else:
+        first_tx_ts, last_tx_ts = _transaction_timestamp_bounds(transactions)
+        if first_tx_ts is None or last_tx_ts is None:
             first_tx_ts = last_tx_ts = now
 
         pg_store.upsert_wallets(

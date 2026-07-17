@@ -220,8 +220,16 @@ def _transform_job(data: dict) -> dict:
 
 
 def _is_valid_eth_address(address: str) -> bool:
-    """Validate Ethereum address format."""
-    return bool(re.match(r"^0x[a-fA-F0-9]{40}$", address))
+    """Validate Ethereum address format.
+
+    An address must be exactly `0x` followed by 40 hex characters with no
+    surrounding whitespace, no trailing newline, and no other extra characters.
+
+    Note: `re.match(r"^...$", s)` accepts a trailing `\\n` because Python's `$`
+    matches before a final newline at end of string. We use `re.fullmatch` so
+    the entire string must match the pattern, which is what the spec requires.
+    """
+    return bool(re.fullmatch(r"0x[a-fA-F0-9]{40}", address))
 
 
 # --- Background ETL Worker ---

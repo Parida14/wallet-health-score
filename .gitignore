@@ -3,6 +3,11 @@
 *.env.*.local
 !*.env.example
 
+.cursor/mcp.json
+.cursor/ai-tracking/
+.cursor/.session/
+!.cursor/mcp.example.json
+
 # Python
 __pycache__/
 *.py[cod]

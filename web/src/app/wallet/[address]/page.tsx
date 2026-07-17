@@ -476,7 +476,7 @@ const SCORING_COMPONENTS = [
     color: 'text-indigo-400',
     bgColor: 'bg-indigo-500/10',
     description: 'Evaluates portfolio spread across different tokens.',
-    details: 'Calculated from the number of unique ERC-20 tokens held with non-zero balances (70% weight) and a concentration factor (30% weight). Holding 10+ tokens scores highest.',
+    details: 'Calculated from unique ERC-20 tokens with non-zero balances (60% weight), a multi-token concentration factor (30% weight), and a stablecoin-balance tent peaking at ~30% exposure (10% weight). Holding 10+ tokens scores highest on the token-count sub-score.',
   },
   {
     icon: Shield,
