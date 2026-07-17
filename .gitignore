@@ -3,6 +3,10 @@
 *.env.*.local
 !*.env.example
 
+.DS_Store
+**/.DS_Store
+
+# Cursor local/runtime (keep mcp.example.json if added later)
 .cursor/mcp.json
 .cursor/ai-tracking/
 .cursor/.session/
