@@ -4,10 +4,10 @@ import logging
 import threading
 import traceback
 from typing import List, Optional
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import psycopg2
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -57,6 +57,29 @@ class PostgresStore:
             rows = cur.fetchall()
             cols = [desc[0] for desc in cur.description]
             return [dict(zip(cols, row)) for row in rows]
+
+    def wallet_exists(self, address: str) -> bool:
+        """Return True if the address has a row in wallets."""
+        query = "SELECT 1 FROM wallets WHERE LOWER(address) = LOWER(%s) LIMIT 1;"
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(query, (address,))
+            return cur.fetchone() is not None
+
+    def get_weekly_tx_counts(self, address: str, since: date) -> dict[date, int]:
+        """Aggregate transaction counts by ISO week start (Monday) since ``since``."""
+        query = """
+            SELECT date_trunc('week', timestamp)::date AS week_start,
+                   COUNT(*)::int AS tx_count
+            FROM transactions
+            WHERE LOWER(address) = LOWER(%s)
+              AND timestamp >= %s
+            GROUP BY 1
+            ORDER BY 1;
+        """
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(query, (address, since))
+            rows = cur.fetchall()
+        return {row[0]: int(row[1]) for row in rows}
 
     # --- Extraction Job Methods ---
 
@@ -185,6 +208,58 @@ class ExtractionJobResponse(BaseModel):
     updated_at: str
 
 
+class WeeklyActivityPoint(BaseModel):
+    week_start: str
+    week_end: str
+    tx_count: int
+    activity_score: float
+
+
+class WeeklyActivityResponse(BaseModel):
+    address: str
+    weeks: int
+    series: List[WeeklyActivityPoint]
+
+
+def _clamp_weeks(weeks: int, *, minimum: int = 1, maximum: int = 104) -> int:
+    """Clamp the requested week lookback into a safe range."""
+    return max(minimum, min(maximum, weeks))
+
+
+def _monday_on_or_before(d: date) -> date:
+    """Return the Monday of the ISO week containing ``d`` (Postgres date_trunc('week'))."""
+    return d - timedelta(days=d.weekday())
+
+
+def _weekly_activity_score(tx_count: int) -> float:
+    """Map weekly tx count to 0–1 intensity (same limb as activity tx_count_score)."""
+    return min(tx_count / 10.0, 1.0)
+
+
+def _build_weekly_activity_series(
+    counts: dict[date, int],
+    weeks: int,
+    *,
+    as_of: date | None = None,
+) -> list[dict]:
+    """Zero-fill ``weeks`` ISO weeks ending at the week containing ``as_of`` (default UTC today)."""
+    end_monday = _monday_on_or_before(as_of or datetime.now(timezone.utc).date())
+    series: list[dict] = []
+    for i in range(weeks - 1, -1, -1):
+        week_start = end_monday - timedelta(weeks=i)
+        week_end = week_start + timedelta(days=6)
+        tx_count = int(counts.get(week_start, 0))
+        series.append(
+            {
+                "week_start": week_start.isoformat(),
+                "week_end": week_end.isoformat(),
+                "tx_count": tx_count,
+                "activity_score": round(_weekly_activity_score(tx_count), 4),
+            }
+        )
+    return series
+
+
 def _transform_score_data(data: dict) -> dict:
     """Transform flat database row into nested API response format."""
     metrics = data.get("metrics") or {}
@@ -300,6 +375,32 @@ def get_wallet_history(address: str, days: int = 30):
     if not history_data:
         raise HTTPException(status_code=404, detail="Wallet history not found.")
     return [_transform_score_data(d) for d in history_data]
+
+
+@app.get("/activity/{address}", response_model=WeeklyActivityResponse, tags=["scoring"])
+def get_wallet_activity(
+    address: str,
+    weeks: int = Query(52, description="Number of weeks of activity to return (1–104)"),
+):
+    """Weekly transaction activity for a wallet, zero-filled over the lookback window.
+
+    Built from the ``transactions`` event log (not sparse features_daily score
+    snapshots), so a single extract still yields a meaningful 1-year trend.
+    """
+    if not pg_store.wallet_exists(address):
+        raise HTTPException(status_code=404, detail="Wallet not found.")
+
+    clamped = _clamp_weeks(weeks)
+    as_of = datetime.now(timezone.utc).date()
+    end_monday = _monday_on_or_before(as_of)
+    since = end_monday - timedelta(weeks=clamped - 1)
+    counts = pg_store.get_weekly_tx_counts(address, since)
+    series = _build_weekly_activity_series(counts, clamped, as_of=as_of)
+    return {
+        "address": address,
+        "weeks": clamped,
+        "series": series,
+    }
 
 
 @app.post("/compare", response_model=CompareResponse, tags=["scoring"])

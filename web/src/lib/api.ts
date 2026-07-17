@@ -3,7 +3,13 @@
  * Provides typed functions for all API endpoints.
  */
 
-import type { WalletScore, CompareRequest, CompareResponse, ExtractionJob } from '@/types/wallet';
+import type {
+  WalletScore,
+  CompareRequest,
+  CompareResponse,
+  ExtractionJob,
+  WeeklyActivityResponse,
+} from '@/types/wallet';
 
 /**
  * Base URL for the API - configurable via environment variable
@@ -120,6 +126,19 @@ export async function getWalletHistory(
 }
 
 /**
+ * Get weekly transaction activity for a wallet (zero-filled lookback).
+ *
+ * @param address - Ethereum wallet address (0x...)
+ * @param weeks - Number of weeks to return (1–104, default 52)
+ */
+export async function getWalletActivity(
+  address: string,
+  weeks: number = 52
+): Promise<WeeklyActivityResponse> {
+  return fetchApi<WeeklyActivityResponse>(`/activity/${address}?weeks=${weeks}`);
+}
+
+/**
  * Compare health scores across multiple wallet addresses.
  * 
  * @param addresses - Array of Ethereum wallet addresses (2-10 addresses)
@@ -198,6 +217,7 @@ export async function checkApiHealth(): Promise<boolean> {
 export const walletApi = {
   getScore: getWalletScore,
   getHistory: getWalletHistory,
+  getActivity: getWalletActivity,
   compare: compareWallets,
   extractWallet,
   getExtractionStatus,

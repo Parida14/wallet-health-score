@@ -82,6 +82,26 @@ export interface ExtractionJob {
 }
 
 /**
+ * One week of on-chain activity (from /activity/{address})
+ */
+export interface WeeklyActivityPoint {
+  week_start: string;
+  week_end: string;
+  tx_count: number;
+  /** 0–1 intensity: min(tx_count / 10, 1) */
+  activity_score: number;
+}
+
+/**
+ * Weekly activity trend response
+ */
+export interface WeeklyActivityResponse {
+  address: string;
+  weeks: number;
+  series: WeeklyActivityPoint[];
+}
+
+/**
  * Score category based on the total score value
  */
 export type ScoreCategory = 'excellent' | 'good' | 'fair' | 'poor' | 'critical';
