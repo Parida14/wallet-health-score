@@ -40,9 +40,10 @@ wallet-health-score/
 | `etl/src/wallet_etl/storage/postgres_store.py` | Schema, upserts |
 | `etl/src/wallet_etl/pipeline/daily_job.py` | ETL flow, scoring logic (five components) |
 | `etl/dags/wallet_score_daily.py` | Airflow DAG, Variables |
-| `api/app/main.py` | FastAPI routes, background extraction jobs |
+| `api/app/main.py` | FastAPI routes, background extraction jobs, weekly activity |
 | `web/src/lib/api.ts` | API client, `NEXT_PUBLIC_API_URL` |
 | `web/src/app/wallet/[address]/page.tsx` | Wallet detail, polling for extraction status |
+| `web/src/components/activity-trend-chart.tsx` | Weekly activity trend (tx count + intensity) |
 | `infra/docker-compose.yml` | Services, healthchecks, volumes |
 
 ---
@@ -62,7 +63,8 @@ wallet-health-score/
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/score/{address}` | Latest score + components |
-| GET | `/history/{address}` | Score time-series |
+| GET | `/history/{address}` | Score time-series (`features_daily` snapshots) |
+| GET | `/activity/{address}?weeks=52` | Weekly tx counts + activity intensity (from `transactions`) |
 | POST | `/compare` | Compare 2–10 wallets |
 | POST | `/extract/{address}` | Trigger ETL (202 Accepted, poll status) |
 | GET | `/extract/status/{job_id}` | Job status |
@@ -93,69 +95,22 @@ Env vars: `.env` at repo root (see `.env.example`). Required: `DATABASE_URL`, `A
 
 - **Python (etl/api):** Type hints, Pydantic for validation. Scoring logic lives in `daily_job.py`; functions like `calculate_activity_score` etc.
 - **TypeScript/React:** App Router, `'use client'` for hooks/events, `lib/api.ts` for fetches. Components: shadcn/ui, Recharts.
-- **Addresses:** Use `LOWER(address)` in SQL; frontend accepts checksummed or lowercase.
-- **Scoring:** Each component 0–1; total = mean × 100. Risk is inverted (higher = safer).
-
----
-
-## ECC Conventions Inherited
-
-This project follows the ECC plugin conventions from
-~/Developer/everything-claude-code:
-- Agent-first: delegate to specialized roles
-- TDD with 80%+ coverage required
-- Security-first: never log secrets, validate all inputs
-- Plan complex features before writing code
-
-### Skill Routing (project-specific)
-
-Invoke these by name in chat. Skills live in `.cursor/skills/`.
-
-| Goal | Skill to invoke |
-|------|-----------------|
-| Research before coding (Alchemy quirks, lib docs, prior art) | `search-first` |
-| Add a new score component or fix a bug | `tdd-workflow` |
-| Pre-commit / pre-deploy gate (lint, typecheck, tests, security) | `verification-loop` |
-| Security audit of an endpoint or pipeline | `security-review` |
-| Design a measurable test for the scoring algorithm | `eval-harness` |
-| New FastAPI endpoint conventions | `api-design` + `backend-patterns` |
-| Browser flow tests against the Next.js app | `e2e-testing` |
-| Look up live API docs for Alchemy, FastAPI, Next.js, dbt | `documentation-lookup` |
-| When approaching context limits | `strategic-compact` |
-
-### Agent Routing (proactive delegation)
-
-| Trigger | Use |
-|---------|-----|
-| Complex feature ("add gas-efficiency score component") | planner → tdd-guide → code-reviewer |
-| Architectural decision ("how do we scale to 100K wallets/day") | architect |
-| Just modified Python in `etl/` or `api/` | python-reviewer |
-| Just modified TS in `web/` | typescript-reviewer |
-| Touching `postgres_store.py` or any SQL | database-reviewer |
-| Build/import error | build-error-resolver |
-| Before merging to `main` | security-reviewer + verification-loop skill |
-
-### MCP Servers Enabled
-
-`.cursor/mcp.json` is intentionally trimmed to **3 servers**: `github`, `context7`, `memory`. Adding more burns context-window tokens. Audit before adding (rule of thumb: <10 MCPs, <80 tools active).
-
-### Hooks Enabled
-
-`.cursor/hooks.json` is the ECC default *minus* the tmux dev-server blocker (we don't use tmux here). Keep these on:
-- **`block-no-verify`** — prevents `git commit --no-verify` from skipping pre-commit hooks
-- **`before-submit-prompt`** — scans prompts for `sk-…`, `ghp_…`, `AKIA…` secret patterns
-- **`before-tab-file-read`** — blocks Tab autocomplete from reading `.env`, `.key`, `.pem`
-- **`after-file-edit`** — auto-format, typecheck, console.log audit
+- **Addresses:** Use `LOWER(address)` in SQL; frontend accepts checksummed or lowercase. Prefer lowercase at write boundaries.
+- **Scoring:** Each component 0–1 in the API/DB; UI multiplies by 100 for display. Risk is inverted (higher = safer).
+- **Activity trend vs score history:** The wallet page Activity Trend chart is built from the `transactions` event log (weekly rollups). Do not use sparse `features_daily` rows as a continuous activity chart — those are point-in-time score snapshots from ETL runs.
+- **Tests:** Prefer TDD for scoring and API changes. Run `cd api && PYTHONPATH=. pytest` and `cd etl && PYTHONPATH=src pytest`.
+- **Security:** Never log secrets; validate Ethereum addresses on write paths; do not commit `.env`.
 
 ---
 
 ## Deeper Docs
 
-- `LEARNING.md` — Concepts, WHY behind design choices
+- `LEARNING.md` — Concepts, WHY behind design choices (local learning notes; may be untracked)
 - `cursor.md` — Build guide, phases
 - `PROJECT_OVERVIEW.md` — Architecture summary
 - `START_HERE.md` — Deployment (Vercel, Railway, Neon)
 - `Wallet_Score_Health_API_PRD.md` — Original PRD
+- `E2E_TESTING.md` — Manual full-stack test checklist
 
 ---
 
@@ -165,3 +120,4 @@ Invoke these by name in chat. Skills live in `.cursor/skills/`.
 - Raw Alchemy JSON stored in MinIO (`{date}/transactions/{address}.json`) for audit/reprocessing.
 - `features_daily` is the source of truth for scores; idempotent by (address, date).
 - On extraction: UI polls `/extract/status/{job_id}` every 5s until completed/failed.
+- This repo does **not** use project-local Cursor ECC skills/hooks under `.cursor/` — keep agent config out of the repo unless explicitly requested.

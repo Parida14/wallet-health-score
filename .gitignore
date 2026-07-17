@@ -6,11 +6,8 @@
 .DS_Store
 **/.DS_Store
 
-# Cursor local/runtime (keep mcp.example.json if added later)
-.cursor/mcp.json
-.cursor/ai-tracking/
-.cursor/.session/
-!.cursor/mcp.example.json
+# Cursor local config (not used by this project)
+.cursor/
 
 # Python
 __pycache__/
